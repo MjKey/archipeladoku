@@ -218,6 +218,8 @@ type Msg
     | CellSelected ( Int, Int )
     | ClearBoardPressed
     | ClearCellPressed
+    | ClearCellCandidatesPressed
+    | ClearBoardCandidatesPressed
     | ClearConnectionHistoryPressed
     | ClearSavedGamesPressed
     | ColorSchemeChanged String
@@ -661,6 +663,61 @@ update msg model =
             )
                 |> andThen (updateState True)
 
+        ClearCellCandidatesPressed ->
+            if Set.member model.selectedCell model.visibleCells
+                && not (cellIsGiven model model.selectedCell)
+            then
+                case Dict.get model.selectedCell model.current of
+                    Just (Multiple _) ->
+                        ( { model
+                            | current = Dict.remove model.selectedCell model.current
+                            , pendingCellChanges = Set.insert model.selectedCell model.pendingCellChanges
+                            , undoStack = pushUndoStack model
+                          }
+                        , Cmd.none
+                        )
+                            |> andThen (updateState True)
+                    _ ->
+                        ( model, Cmd.none )
+            else
+                ( model, Cmd.none )
+
+        ClearBoardCandidatesPressed ->
+            let
+                boardCells : Set ( Int, Int )
+                boardCells =
+                    Dict.get model.selectedCell model.cellBoards
+                        |> Maybe.withDefault []
+                        |> List.concatMap .cells
+                        |> Set.fromList
+            in
+            ( { model
+                | current =
+                    Dict.filter
+                        (\cell cellValue ->
+                            not (Set.member cell boardCells &&
+                                 case cellValue of
+                                     Multiple _ -> True
+                                     _ -> False)
+                        )
+                        model.current
+                , undoStack = pushUndoStack model
+                , pendingCellChanges = Set.union model.pendingCellChanges (
+                    Dict.filter
+                        (\cell cellValue ->
+                            Set.member cell boardCells &&
+                                 case cellValue of
+                                     Multiple _ -> True
+                                     _ -> False
+                        )
+                        model.current
+                    |> Dict.keys |> Set.fromList
+                )
+              }
+            , Cmd.none
+            )
+                |> andThen (updateState True)
+
         ClearCellPressed ->
             if Set.member model.selectedCell model.visibleCells
                 && not (cellIsGiven model model.selectedCell)
@@ -744,7 +801,7 @@ update msg model =
                             case deathLink.cause of
                                 Just cause ->
                                     String.concat
-                                        [ "Death Link triggered by "
+                                        [ "Связь Смерти активирована игроком "
                                         , deathLink.source
                                         , ": "
                                         , cause
@@ -753,13 +810,13 @@ update msg model =
 
                                 Nothing ->
                                     String.concat
-                                        [ "Death Link triggered by "
+                                        [ "Связь Смерти активирована игроком "
                                         , deathLink.source
                                         , "."
                                         ]
 
                         Err _ ->
-                            "Death Link triggered"
+                            "Связь Смерти активирована"
             in
             ( { model
                 | current = Dict.empty
@@ -1072,7 +1129,7 @@ update msg model =
                         _ ->
                             model.gameState
               }
-                |> addLocalMessage (not status && model.gameState == Playing) "Disconnected from server."
+                |> addLocalMessage (not status && model.gameState == Playing) "Отключено от сервера."
             , Cmd.none
             )
                 |> andThenIf (status && model.gameState == Connecting) addConnectionHistory
@@ -2630,6 +2687,8 @@ type alias YamlOptions =
 type BindableAction
     = ClearBoard
     | ClearCell
+    | ClearCellCandidates
+    | ClearBoardCandidates
     | EnterNumber Int
     | FillBoardCandidates
     | FillCellCandidates
@@ -6891,28 +6950,42 @@ bindableActionData action =
         ClearBoard ->
             { defaultCodes = []
             , id = "clearBoard"
-            , label = \_ -> "Clear board"
+            , label = \_ -> "Очистить доску"
             , msg = ClearBoardPressed
             }
 
         ClearCell ->
             { defaultCodes = [ "Backspace", "Delete" ]
             , id = "clearCell"
-            , label = \_ -> "Clear cell"
+            , label = \_ -> "Очистить ячейку"
             , msg = ClearCellPressed
+            }
+
+        ClearCellCandidates ->
+            { defaultCodes = []
+            , id = "clearCellCandidates"
+            , label = \_ -> "Удалить всех кандидатов в ячейке"
+            , msg = ClearCellCandidatesPressed
+            }
+
+        ClearBoardCandidates ->
+            { defaultCodes = []
+            , id = "clearBoardCandidates"
+            , label = \_ -> "Удалить всех кандидатов на доске"
+            , msg = ClearBoardCandidatesPressed
             }
 
         EnterNumber n ->
             { defaultCodes = defaultNumberCodes n
             , id = "enterNumber" ++ String.fromInt n
-            , label = \model -> "Input " ++ numberToString { model | emojiTrapTimer = 0 } n
+            , label = \model -> "Ввод " ++ numberToString { model | emojiTrapTimer = 0 } n
             , msg = NumberPressed n
             }
 
         FillBoardCandidates ->
             { defaultCodes = []
             , id = "fillBoardCandidates"
-            , label = \_ -> "Add candidates to board"
+            , label = \_ -> "Добавить кандидатов на доску"
             , msg = FillBoardCandidatesPressed
             }
 
@@ -6926,119 +6999,119 @@ bindableActionData action =
         HoldCandidateMode ->
             { defaultCodes = [ "Shift" ]
             , id = "holdCandidateMode"
-            , label = \_ -> "Hold input mode"
+            , label = \_ -> "Удерживать режим ввода"
             , msg = InputModifierHeld
             }
 
         MoveDown ->
             { defaultCodes = [ "ArrowDown", "KeyJ" ]
             , id = "moveDown"
-            , label = \_ -> "Move down"
+            , label = \_ -> "Вниз"
             , msg = MoveSelectionPressed ( 1, 0 )
             }
 
         MoveLeft ->
             { defaultCodes = [ "ArrowLeft", "KeyH" ]
             , id = "moveLeft"
-            , label = \_ -> "Move left"
+            , label = \_ -> "Влево"
             , msg = MoveSelectionPressed ( 0, -1 )
             }
 
         MoveRight ->
             { defaultCodes = [ "ArrowRight", "KeyL" ]
             , id = "moveRight"
-            , label = \_ -> "Move right"
+            , label = \_ -> "Вправо"
             , msg = MoveSelectionPressed ( 0, 1 )
             }
 
         MoveUp ->
             { defaultCodes = [ "ArrowUp", "KeyK" ]
             , id = "moveUp"
-            , label = \_ -> "Move up"
+            , label = \_ -> "Вверх"
             , msg = MoveSelectionPressed ( -1, 0 )
             }
 
         RemoveInvalidCandidates ->
             { defaultCodes = [ "KeyW" ]
             , id = "removeInvalidCandidates"
-            , label = \_ -> "Remove invalid candidates"
+            , label = \_ -> "Удалить неверных кандидатов"
             , msg = RemoveInvalidCandidatesPressed
             }
 
         SelectSingleCandidateCell ->
             { defaultCodes = [ "KeyS" ]
             , id = "selectSingleCandidateCell"
-            , label = \_ -> "Select single-candidate cell"
+            , label = \_ -> "Выбрать ячейку с одним кандидатом"
             , msg = SelectSingleCandidateCellPressed
             }
 
         SelectSolvableBoard ->
             { defaultCodes = [ "KeyG" ]
             , id = "selectSolvableBoard"
-            , label = \_ -> "Select solvable board"
+            , label = \_ -> "Выбрать решаемую доску"
             , msg = SelectSolvableBoardPressed
             }
 
         ToggleCandidateMode ->
             { defaultCodes = [ "Space" ]
             , id = "toggleCandidateMode"
-            , label = \_ -> "Toggle input mode"
+            , label = \_ -> "Переключить режим ввода"
             , msg = ToggleCandidateModePressed
             }
 
         ToggleHighlightMode ->
             { defaultCodes = [ "Tab" ]
             , id = "toggleHighlightMode"
-            , label = \_ -> "Toggle highlight mode"
+            , label = \_ -> "Переключить режим подсветки"
             , msg = ToggleHighlightModePressed
             }
 
         Undo ->
             { defaultCodes = [ "KeyZ" ]
             , id = "undo"
-            , label = \_ -> "Undo"
+            , label = \_ -> "Отменить"
             , msg = UndoPressed
             }
 
         UseRemoveRandomCandidate ->
             { defaultCodes = []
             , id = "removeRandomCandidate"
-            , label = \_ -> "Remove random candidate"
+            , label = \_ -> "Удалить случайного кандидата"
             , msg = RemoveRandomCandidatePressed
             }
 
         UseSolveRandomCell ->
             { defaultCodes = []
             , id = "solveRandomCell"
-            , label = \_ -> "Solve random cell"
+            , label = \_ -> "Решить случайную ячейку"
             , msg = SolveRandomCellPressed
             }
 
         UseSolveSelectedCell ->
             { defaultCodes = []
             , id = "solveSelectedCell"
-            , label = \_ -> "Solve selected cell"
+            , label = \_ -> "Решить выбранную ячейку"
             , msg = SolveSelectedCellPressed
             }
 
         ZoomIn ->
             { defaultCodes = [ "NumpadAdd" ]
             , id = "zoomIn"
-            , label = \_ -> "Zoom in"
+            , label = \_ -> "Увеличить"
             , msg = ZoomInPressed
             }
 
         ZoomOut ->
             { defaultCodes = [ "NumpadSubtract" ]
             , id = "zoomOut"
-            , label = \_ -> "Zoom out"
+            , label = \_ -> "Уменьшить"
             , msg = ZoomOutPressed
             }
 
         ZoomReset ->
             { defaultCodes = []
             , id = "zoomReset"
-            , label = \_ -> "Zoom reset"
+            , label = \_ -> "Сбросить масштаб"
             , msg = ZoomResetPressed
             }
 
@@ -7082,6 +7155,8 @@ allBindableActions =
     , MoveLeft
     , MoveRight
     , ClearCell
+    , ClearCellCandidates
+    , ClearBoardCandidates
     , ZoomIn
     , ZoomOut
     , ZoomReset
@@ -7285,7 +7360,7 @@ view model =
                     , HA.style "margin" "0 auto"
                     , HA.style "padding" "var(--spacing-l)"
                     ]
-                    [ Html.text "Connecting..." ]
+                    [ Html.text "Подключение..." ]
                 , viewColorScheme model
                 ]
 
@@ -7303,7 +7378,7 @@ view model =
                     ]
                     [ Html.h2
                         []
-                        [ Html.text "Generating Puzzle..." ]
+                        [ Html.text "Генерация головоломки..." ]
                     , Html.div
                         []
                         [ Html.text (Tuple.first model.generationProgress)
@@ -7385,7 +7460,7 @@ viewMenuConnect model =
         ]
         [ Html.h2
             []
-            [ Html.text "Connect to Archipelago" ]
+            [ Html.text "Подключиться к Archipelago" ]
         , Html.form
             [ HA.class "row gap-m wrap"
             , HE.onSubmit ConnectPressed
@@ -7393,7 +7468,7 @@ viewMenuConnect model =
             [ Html.label
                 [ HA.class "column"
                 ]
-                [ Html.text "Host:"
+                [ Html.text "Хост:"
                 , Html.input
                     [ HA.class "input"
                     , HA.type_ "text"
@@ -7406,7 +7481,7 @@ viewMenuConnect model =
             , Html.label
                 [ HA.class "column"
                 ]
-                [ Html.text "Slot Name:"
+                [ Html.text "Имя слота:"
                 , Html.input
                     [ HA.class "input"
                     , HA.type_ "text"
@@ -7419,11 +7494,11 @@ viewMenuConnect model =
             , Html.label
                 [ HA.class "column"
                 ]
-                [ Html.text "Password:"
+                [ Html.text "Пароль:"
                 , Html.input
                     [ HA.class "input"
                     , HA.type_ "password"
-                    , HA.placeholder "Leave blank if no password"
+                    , HA.placeholder "Оставьте пустым, если нет пароля"
                     , HA.value model.password
                     , HE.onInput PasswordInputChanged
                     ]
@@ -7433,7 +7508,7 @@ viewMenuConnect model =
                 [ HA.class "button"
                 , HA.style "align-self" "end"
                 ]
-                [ Html.text "Connect"]
+                [ Html.text "Подключиться"]
             ]
         , if List.isEmpty model.connectionHistory then
             Html.text ""
@@ -7442,7 +7517,7 @@ viewMenuConnect model =
             Html.div
                 [ HA.class "column gap-s"
                 ]
-                [ Html.text "Previous Connections:"
+                [ Html.text "Предыдущие подключения:"
                 , Html.div
                     [ HA.class "row gap-s wrap"
                     ]
@@ -7462,7 +7537,7 @@ viewMenuConnect model =
                             , HA.style "margin-left" "auto"
                             , HE.onClick ClearConnectionHistoryPressed
                             ]
-                            [ Html.text "Clear History" ]
+                            [ Html.text "Очистить историю" ]
                         ]
                     )
                 ]
@@ -7478,12 +7553,12 @@ viewMenuResume model =
                 ]
                 [ Html.h2
                     []
-                    [ Html.text "Resume Local Game" ]
+                    [ Html.text "Продолжить локальную игру" ]
                 , Html.div
                     []
                     [ Html.text
                         (String.concat
-                            [ "Last played: "
+                            [ "Последняя игра: "
                             , viewDateTime model save.timestamp
                             ]
                         )
@@ -7492,7 +7567,7 @@ viewMenuResume model =
                     []
                     [ Html.text
                         (String.concat
-                            [ "Seed: "
+                            [ "СИД: "
                             , String.fromInt save.seed
                             ]
                         )
@@ -7501,11 +7576,11 @@ viewMenuResume model =
                     []
                     [ Html.text
                         (String.concat
-                            [ "Progress: "
+                            [ "Прогресс: "
                             , String.fromInt (Set.size save.unlockedBlocks)
                             , " / "
                             , String.fromInt (save.puzzleAreas.blocks |> List.length)
-                            , " blocks unlocked, "
+                            , " блоков разблокировано, "
                             , String.fromInt (Set.size save.solvedLocations)
                             , " / "
                             , String.fromInt
@@ -7516,7 +7591,7 @@ viewMenuResume model =
                                     , List.length save.puzzleAreas.boards
                                     ]
                                 )
-                            , " areas solved"
+                            , " областей решено"
                             ]
                         )
                     ]
@@ -7524,7 +7599,7 @@ viewMenuResume model =
                     [ HA.class "button"
                     , HE.onClick (ResumeLocalGamePressed save)
                     ]
-                    [ Html.text "Resume Local Game" ]
+                    [ Html.text "Продолжить локальную игру" ]
                 ]
 
         Nothing ->
@@ -7564,7 +7639,7 @@ viewMenuOptions model =
         ]
         [ Html.h2
             []
-            [ Html.text "Play Local Game / Generate YAML" ]
+            [ Html.text "Одиночная игра / Сгенерировать YAML" ]
         , Html.div
             [ HA.style "display" "grid"
             , HA.style "grid-template-columns" "repeat(auto-fit, minmax(300px, 1fr))"
@@ -7584,17 +7659,17 @@ viewMenuOptions model =
                 [ HA.class "button"
                 , HE.onClick LoadYamlPressed
                 ]
-                [ Html.text "Load YAML" ]
+                [ Html.text "Загрузить YAML" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick GenerateYamlPressed
                 ]
-                [ Html.text "Generate YAML" ]
+                [ Html.text "Сгенерировать YAML" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick PlayLocalPressed
                 ]
-                [ Html.text "Play Local Game" ]
+                [ Html.text "Одиночная игра" ]
             ]
         , viewMenuOptionsStats model puzzleAreas
         ]
@@ -7608,7 +7683,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
         ]
         [ Html.summary
             []
-            [ Html.text "Board Options" ]
+            [ Html.text "Настройки доски" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -7620,7 +7695,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Block Size:"
+                    [ Html.text "Размер блока:"
                     , viewOptionHint
                         "block-size-hint"
                         "The size of each block, and the width/height of each board. A standard Sudoku is 9. Smaller sizes are easier, larger sizes are more difficult."
@@ -7643,7 +7718,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Boards per Cluster: "
+                    [ Html.text "Досок в кластере: "
                     , viewOptionHint
                         "boards-per-cluster-hint"
                         "How many boards to put in each cluster of overlapping boards. 1 disables clustering."
@@ -7670,7 +7745,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Number of Boards:"
+                    [ Html.text "Количество досок:"
                     , viewOptionHint
                         "number-of-boards-hint"
                         "The total number of boards in the puzzle."
@@ -7717,7 +7792,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Difficulty:"
+                    [ Html.text "Сложность:"
                     , viewOptionHint
                         "difficulty-hint"
                         (String.join
@@ -7734,11 +7809,11 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                 , Html.div
                     [ HA.class "row gap-m wrap"
                     ]
-                    [ viewRadioButton 1 model.difficulty "difficulty" DifficultyChanged (\_ -> "Beginner")
-                    , viewRadioButton 2 model.difficulty "difficulty" DifficultyChanged (\_ -> "Easy")
-                    , viewRadioButton 3 model.difficulty "difficulty" DifficultyChanged (\_ -> "Medium")
-                    , viewRadioButton 4 model.difficulty "difficulty" DifficultyChanged (\_ -> "Hard")
-                    , viewRadioButton 5 model.difficulty "difficulty" DifficultyChanged (\_ -> "Very Hard")
+                    [ viewRadioButton 1 model.difficulty "difficulty" DifficultyChanged (\_ -> "Новичок")
+                    , viewRadioButton 2 model.difficulty "difficulty" DifficultyChanged (\_ -> "Легкая")
+                    , viewRadioButton 3 model.difficulty "difficulty" DifficultyChanged (\_ -> "Средняя")
+                    , viewRadioButton 4 model.difficulty "difficulty" DifficultyChanged (\_ -> "Сложная")
+                    , viewRadioButton 5 model.difficulty "difficulty" DifficultyChanged (\_ -> "Очень сложная")
                     ]
                 ]
             , Html.div
@@ -7749,7 +7824,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Progression:"
+                    [ Html.text "Прогрессия:"
                     , viewOptionHint
                         "progression-style-hint"
                         (String.join
@@ -7763,8 +7838,8 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                 , Html.div
                     [ HA.class "row gap-m wrap"
                     ]
-                    [ viewRadioButton Fixed model.progression "progression" ProgressionChanged (\_ -> "Fixed")
-                    , viewRadioButton Shuffled model.progression "progression" ProgressionChanged (\_ -> "Shuffled")
+                    [ viewRadioButton Fixed model.progression "progression" ProgressionChanged (\_ -> "Фиксированная")
+                    , viewRadioButton Shuffled model.progression "progression" ProgressionChanged (\_ -> "Случайная")
                     ]
                 ]
             , Html.div
@@ -7775,7 +7850,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Bundle Size:"
+                    [ Html.text "Размер набора (Bundle):"
                     , viewOptionHint
                         "bundle-size-hint"
                         (String.join
@@ -7818,7 +7893,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Additional Starting Blocks"
+                    [ Html.text "Дополнительные начальные блоки"
                     , viewOptionHint
                         "additional-starting-blocks-hint"
                         (String.join
@@ -7859,7 +7934,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Duplicate Progression Items:"
+                    [ Html.text "Дублирование предметов прогрессии:"
                     , viewOptionHint
                         "duplicate-progression-hint"
                         (String.join
@@ -7913,7 +7988,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Disabled Locations:"
+                    [ Html.text "Отключенные локации:"
                     , viewOptionHint
                         "disabled-locations-hint"
                         (String.join
@@ -7953,7 +8028,7 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Location Scouting:"
+                    [ Html.text "Разведка локаций:"
                     , viewOptionHint
                         "location-scouting-hint"
                         (String.join
@@ -7973,19 +8048,19 @@ viewMenuOptionsBoard model maxAdditionalStartingBlocks =
                         model.locationScouting
                         "location-scouting"
                         LocationScoutingChanged
-                        (\_ -> "Auto")
+                        (\_ -> "Авто")
                     , viewRadioButton
                         ScoutingManual
                         model.locationScouting
                         "location-scouting"
                         LocationScoutingChanged
-                        (\_ -> "Manual")
+                        (\_ -> "Вручную")
                     , viewRadioButton
                         ScoutingDisabled
                         model.locationScouting
                         "location-scouting"
                         LocationScoutingChanged
-                        (\_ -> "Disabled")
+                        (\_ -> "Отключена")
                     ]
                 ]
             ]
@@ -8000,7 +8075,7 @@ viewMenuOptionsFiller model =
         ]
         [ Html.summary
             []
-            [ Html.text "Filler Options" ]
+            [ Html.text "Настройки филлеров" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -8018,7 +8093,7 @@ viewMenuOptionsFiller model =
                     )
                 )
             , viewRatioInputs
-                { label = "Solve Selected Cell Ratio:"
+                { label = "Вероятность \"Решить выбранную ячейку\":"
                 , hint = "Ratio of Solve Selected Cell items to number of boards."
                 , hintId = "solve-selected-cell-ratio-hint"
                 , value = model.solveSelectedCellRatio
@@ -8028,7 +8103,7 @@ viewMenuOptionsFiller model =
                 , onRangeChange = SolveSelectedCellRatioChanged
                 }
             , viewRatioInputs
-                { label = "Solve Random Cell Ratio:"
+                { label = "Вероятность \"Решить случайную ячейку\":"
                 , hint = "Ratio of Solve Random Cell items to number of boards."
                 , hintId = "solve-random-cell-ratio-hint"
                 , value = model.solveRandomCellRatio
@@ -8038,7 +8113,7 @@ viewMenuOptionsFiller model =
                 , onRangeChange = SolveRandomCellRatioChanged
                 }
             , viewRatioInputs
-                { label = "Remove Random Candidate Ratio:"
+                { label = "Вероятность \"Удалить случайного кандидата\":"
                 , hint = "Ratio of Remove Random Candidate items to number of boards."
                 , hintId = "remove-random-candidate-ratio-hint"
                 , value = model.removeRandomCandidateRatio
@@ -8048,7 +8123,7 @@ viewMenuOptionsFiller model =
                 , onRangeChange = RemoveRandomCandidateRatioChanged
                 }
             , viewRatioInputs
-                { label = "Disco Trap Ratio:"
+                { label = "Вероятность Диско-ловушки:"
                 , hint = "Ratio of Disco Trap items to number of boards. When received all cells will shift colors for a time."
                 , hintId = "disco-trap-ratio-hint"
                 , value = model.discoTrapRatio
@@ -8058,7 +8133,7 @@ viewMenuOptionsFiller model =
                 , onRangeChange = DiscoTrapRatioChanged
                 }
             , viewRatioInputs
-                { label = "Emoji Trap Ratio:"
+                { label = "Вероятность Эмодзи-ловушки:"
                 , hint = "Ratio of Emoji Trap items to number of boards. When received your numbers will be replaced with emojis for a time."
                 , hintId = "emoji-trap-ratio-hint"
                 , value = model.emojiTrapRatio
@@ -8068,7 +8143,7 @@ viewMenuOptionsFiller model =
                 , onRangeChange = EmojiTrapRatioChanged
                 }
             , viewRatioInputs
-                { label = "Tunnel Vision Trap Ratio:"
+                { label = "Вероятность ловушки \"Туннельное зрение\":"
                 , hint = "Ratio of Tunnel Vision Trap items to number of boards. When received you will only be able to see a small area of the board for a time."
                 , hintId = "tunnelVision-trap-ratio-hint"
                 , value = model.tunnelVisionTrapRatio
@@ -8089,7 +8164,7 @@ viewMenuOptionsLocalPlay model =
         ]
         [ Html.summary
             []
-            [ Html.text "Local Game Options" ]
+            [ Html.text "Настройки локальной игры" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -8128,7 +8203,7 @@ viewMenuOptionsArchipelago model =
         ]
         [ Html.summary
             []
-            [ Html.text "Archipelago Options" ]
+            [ Html.text "Настройки Archipelago" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -8140,7 +8215,7 @@ viewMenuOptionsArchipelago model =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Player Name:"
+                    [ Html.text "Имя игрока:"
                     , viewOptionHint
                         "player-name-hint"
                         (String.join
@@ -8169,7 +8244,7 @@ viewMenuOptionsArchipelago model =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Pre-fill Nothings Percent"
+                    [ Html.text "Процент заполнения \"Пустышек\" (Nothings)"
                     , viewOptionHint
                         "pre-fill-nothings-percent-hint"
                         (String.join
@@ -8221,7 +8296,7 @@ viewMenuOptionsArchipelago model =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Progression Balancing:"
+                    [ Html.text "Балансировка прогрессии:"
                     , viewOptionHint
                         "progression-balancing-hint"
                         "A system that can move progression earlier, to try and prevent the player from getting stuck and bored early. A lower setting means more getting stuck. A higher setting means less getting stuck."
@@ -8268,7 +8343,7 @@ viewMenuOptionsArchipelago model =
                     , HA.style "align-items" "center"
                     , HA.style "justify-content" "space-between"
                     ]
-                    [ Html.text "Death Link:"
+                    [ Html.text "Связь Смерти (Death Link):"
                     , viewOptionHint
                         "death-link-hint"
                         "Enable Death Link. When a player with death link enabled dies all other players that also enabled it die as well. Archipeladoku can only receive death links, not send them. When a death link is received all non-given numbers will be cleared. This can also be toggled in-game from the Debug menu."
@@ -8277,8 +8352,8 @@ viewMenuOptionsArchipelago model =
                     [ HA.class "row gap-s"
                     , HA.style "align-items" "center"
                     ]
-                    [ viewRadioButton True model.deathLinkInput "death-link" DeathLinkInputChanged (\_ -> "Enabled")
-                    , viewRadioButton False model.deathLinkInput "death-link" DeathLinkInputChanged (\_ -> "Disabled")
+                    [ viewRadioButton True model.deathLinkInput "death-link" DeathLinkInputChanged (\_ -> "Включено")
+                    , viewRadioButton False model.deathLinkInput "death-link" DeathLinkInputChanged (\_ -> "Отключена")
                     ]
                 ]
             ]
@@ -8397,42 +8472,42 @@ viewMenuOptionsStats model puzzleAreas =
             ]
             [ Html.h3
                 []
-                [ Html.text "Statistics" ]
+                [ Html.text "Статистика" ]
 
-            , textDiv "Cells: "
+            , textDiv "Ячейки: "
             , textDiv (String.fromInt cells)
 
-            , textDiv "Locations: "
+            , textDiv "Локации: "
             , textDiv (String.fromInt locations)
 
             , Html.Extra.viewIf
                 (not (Set.isEmpty effectiveDisabledLocations))
-                (textDiv "Disabled Locations: ")
+                (textDiv "Отключенные локации: ")
             , Html.Extra.viewIf
                 (not (Set.isEmpty effectiveDisabledLocations))
                 (textDiv (formatLocationTypes effectiveDisabledLocations))
 
             , Html.Extra.viewIf
                 (not (Set.isEmpty reEnabledLocations))
-                (textDiv "- Auto Re-enabled: ")
+                (textDiv "- Автоматически включены: ")
             , Html.Extra.viewIf
                 (not (Set.isEmpty reEnabledLocations))
                 (textDiv (formatLocationTypes reEnabledLocations))
 
-            , textDiv "Progression Items: "
+            , textDiv "Предметы прогрессии: "
             , textDiv ""
-            , textDiv "- Excl. pre-filled: "
+            , textDiv "- Исключая предзаполненные: "
             , textDiv (countWithPercent progressionItems (locations - preFilledNothings))
-            , textDiv "- Incl. pre-filled: "
+            , textDiv "- Включая предзаполненные: "
             , textDiv (countWithPercent progressionItems locations)
-            , textDiv "- Duplicates: "
+            , textDiv "- Дубликаты: "
             , textDiv <| String.fromInt <| progressionItems - rawProgressionItems
 
-            , textDiv "Filler Items: "
+            , textDiv "Предметы-филлеры: "
             , textDiv ""
-            , textDiv "- Excl. pre-filled: "
+            , textDiv "- Исключая предзаполненные: "
             , textDiv (countWithPercent (fillerItems - preFilledNothings) (locations - preFilledNothings))
-            , textDiv "- Incl. pre-filled: "
+            , textDiv "- Включая предзаполненные: "
             , textDiv (countWithPercent fillerItems locations)
             ]
         , Html.div
@@ -8441,16 +8516,16 @@ viewMenuOptionsStats model puzzleAreas =
             (List.append
                 [ Html.h3
                     []
-                    [ Html.text "Filler Item Counts" ]
+                    [ Html.text "Количество предметов-филлеров" ]
                 ]
                 (List.concatMap
                     (\( item, count ) ->
                         if item == NothingItem then
                             [ textDiv <| itemName item ++ ": "
                             , textDiv ""
-                            , textDiv "- Excl. pre-filled: "
+                            , textDiv "- Исключая предзаполненные: "
                             , textDiv <| String.fromInt (count - preFilledNothings)
-                            , textDiv "- Incl. pre-filled: "
+                            , textDiv "- Включая предзаполненные: "
                             , textDiv <| String.fromInt count
                             ]
 
@@ -8581,7 +8656,7 @@ viewMenuAbout =
         [ HA.class "main-menu-panel" ]
         [ Html.h2
             []
-            [ Html.text "About / FAQ" ]
+            [ Html.text "Об игре / ЧАВО" ]
         , Html.div
             [ HA.class "column gap-l"
             ]
@@ -8658,7 +8733,7 @@ viewMenuUtilities =
         [ HA.class "main-menu-panel" ]
         [ Html.h2
             []
-            [ Html.text "Utilities" ]
+            [ Html.text "Утилиты" ]
         , Html.div
             [ HA.class "row gap-m"
             ]
@@ -8666,12 +8741,12 @@ viewMenuUtilities =
                 [ HA.class "button button-flash"
                 , HE.onClick ClearSavedGamesPressed
                 ]
-                [ Html.text "Clear saved game data" ]
+                [ Html.text "Очистить сохраненные данные" ]
             , Html.button
                 [ HA.class "button button-flash"
                 , HE.onClick ResetClientSettingsPressed
                 ]
-                [ Html.text "Reset client settings" ]
+                [ Html.text "Сбросить настройки клиента" ]
             ]
         ]
 
@@ -8758,16 +8833,16 @@ viewTrapTimers model =
                                 ]
                             ]
                 )
-                [ { label = "Disco trap"
+                [ { label = "Диско-ловушка"
                   , timeLeft = model.discoTrapTimer
                   }
-                , { label = "Emoji trap"
+                , { label = "Эмодзи-ловушка"
                   , timeLeft = model.emojiTrapTimer
                   }
-                , { label = "Tunnel vision trap"
+                , { label = "Туннельное зрение"
                   , timeLeft = model.tunnelVisionTrapTimer
                   }
-                , { label = "Fireworks"
+                , { label = "Фейерверки"
                   , timeLeft = model.fireworksTimer
                   }
                 ]
@@ -8802,7 +8877,7 @@ viewInfoPanelInput model =
         ]
         [ Html.summary
             []
-            [ Html.text "Input" ]
+            [ Html.text "Ввод" ]
         , Html.div
             [ HA.class "column gap-l"
             ]
@@ -8870,7 +8945,7 @@ viewInfoPanelInput model =
                 ]
                 [ Html.text
                     (String.concat
-                        [ "Input mode"
+                        [ "Режим ввода"
                         , keyHint model ToggleCandidateMode
                         , ","
                         , keyHint model HoldCandidateMode
@@ -8884,20 +8959,20 @@ viewInfoPanelInput model =
                         (getCandidateMode model)
                         "input-mode"
                         CandidateModeChanged
-                        (\_ -> "Number")
+                        (\_ -> "Число")
                     , viewRadioButton
                         True
                         (getCandidateMode model)
                         "input-mode"
                         CandidateModeChanged
-                        (\_ -> "Candidates")
+                        (\_ -> "Кандидаты")
                     ]
                 ]
             , Html.div
                 [ HA.class "col gap-s" ]
                 [ Html.text
                     (String.concat
-                        [ "Highlight mode"
+                        [ "Режим подсветки"
                         , keyHint model ToggleHighlightMode
                         , ", "
                         , keyLabel model HoldCandidateMode
@@ -8913,25 +8988,25 @@ viewInfoPanelInput model =
                         model.highlightMode
                         "highlight-mode"
                         HighlightModeChanged
-                        (\_ -> "None")
+                        (\_ -> "Нет")
                     , viewRadioButton
                         HighlightBoard
                         model.highlightMode
                         "highlight-mode"
                         HighlightModeChanged
-                        (\_ -> "Board")
+                        (\_ -> "Доска")
                     , viewRadioButton
                         HighlightArea
                         model.highlightMode
                         "highlight-mode"
                         HighlightModeChanged
-                        (\_ -> "Area")
+                        (\_ -> "Область")
                     , viewRadioButton
                         HighlightNumber
                         model.highlightMode
                         "highlight-mode"
                         HighlightModeChanged
-                        (\_ -> "Number")
+                        (\_ -> "Число")
                     ]
                 ]
             ]
@@ -8950,7 +9025,7 @@ viewInfoPanelSelected model =
         ]
         [ Html.summary
             []
-            [ Html.text "Selected Cell / Hints" ]
+            [ Html.text "Выбранная ячейка / Подсказки" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -9008,11 +9083,11 @@ viewInfoPanelSelected model =
                         []
                         [ Html.text
                             (String.concat
-                                [ "Hints available: "
+                                [ "Доступно подсказок: "
                                 , String.fromInt <| model.hintPoints // model.hintCost
                                 , " ("
                                 , String.fromInt model.hintPoints
-                                , " points, cost "
+                                , " очков, цена "
                                 , String.fromInt model.hintCost
                                 , ")"
                                 ]
@@ -9036,10 +9111,10 @@ viewInfoPanelSelected model =
                             [ Html.text
                                 (String.concat
                                     [ if model.gameIsLocal || not model.createHintsWhenScouting then
-                                        "Scout all ("
+                                        "Разведать все ("
 
                                       else
-                                        "Scout and hint all ("
+                                        "Разведать и подсказки для всех ("
                                     , String.fromInt (Set.size scoutable)
                                     , ")"
                                     ]
@@ -9062,7 +9137,7 @@ viewInfoPanelSelected model =
                             , HE.onCheck CreateHintsWhenScoutingChanged
                             ]
                             []
-                        , Html.text "Create server hints when scouting"
+                        , Html.text "Создавать подсказки на сервере при разведке"
                         ]
                     ]
                 ]
@@ -9078,7 +9153,7 @@ viewInfoPanelHelpers model =
         ]
         [ Html.summary
             []
-            [ Html.text "Helpers" ]
+            [ Html.text "Помощники" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -9091,7 +9166,7 @@ viewInfoPanelHelpers model =
                     , HA.disabled (List.isEmpty model.undoStack)
                     , HE.onClick UndoPressed
                     ]
-                    [ Html.text "Undo" ]
+                    [ Html.text "Отменить" ]
                 , Html.text (keyHint model Undo)
                 ]
             , Html.div
@@ -9102,7 +9177,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick SelectSingleCandidateCellPressed
                     ]
-                    [ Html.text "Select single-candidate cell" ]
+                    [ Html.text "Выбрать ячейку с одним кандидатом" ]
                 , Html.text (keyHint model SelectSingleCandidateCell)
                 ]
             , Html.div
@@ -9113,7 +9188,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick SelectSolvableBoardPressed
                     ]
-                    [ Html.text "Select solvable board"
+                    [ Html.text "Выбрать решаемую доску"
                     ]
                 , Html.text (keyHint model SelectSolvableBoard)
                 ]
@@ -9125,7 +9200,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick RemoveInvalidCandidatesPressed
                     ]
-                    [ Html.text "Remove all invalid candidates" ]
+                    [ Html.text "Удалить всех неверных кандидатов" ]
                 , Html.text (keyHint model RemoveInvalidCandidates)
                 , Html.label
                     [ HA.class "row gap-s"
@@ -9137,8 +9212,30 @@ viewInfoPanelHelpers model =
                         , HE.onCheck AutoRemoveInvalidCandidatesChanged
                         ]
                         []
-                    , Html.text "Auto"
+                    , Html.text "Авто"
                     ]
+                ]
+            , Html.div
+                [ HA.class "row gap-m"
+                , HA.style "align-items" "center"
+                ]
+                [ Html.button
+                    [ HA.class "button"
+                    , HE.onClick ClearCellCandidatesPressed
+                    ]
+                    [ Html.text "Удалить всех кандидатов в ячейке" ]
+                , Html.text (keyHint model ClearCellCandidates)
+                ]
+            , Html.div
+                [ HA.class "row gap-m"
+                , HA.style "align-items" "center"
+                ]
+                [ Html.button
+                    [ HA.class "button"
+                    , HE.onClick ClearBoardCandidatesPressed
+                    ]
+                    [ Html.text "Удалить всех кандидатов на доске" ]
+                , Html.text (keyHint model ClearBoardCandidates)
                 ]
             , Html.div
                 [ HA.class "row gap-m"
@@ -9148,7 +9245,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick FillCellCandidatesPressed
                     ]
-                    [ Html.text "Add candidates to cell" ]
+                    [ Html.text "Добавить кандидатов в ячейку" ]
                 , Html.text (keyHint model FillCellCandidates)
                 , Html.label
                     [ HA.class "row gap-s"
@@ -9171,7 +9268,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick FillBoardCandidatesPressed
                     ]
-                    [ Html.text "Add candidates to board" ]
+                    [ Html.text "Добавить кандидатов на доску" ]
                 , Html.text (keyHint model FillBoardCandidates)
                 ]
             , Html.div
@@ -9182,7 +9279,7 @@ viewInfoPanelHelpers model =
                     [ HA.class "button"
                     , HE.onClick ClearBoardPressed
                     ]
-                    [ Html.text "Clear board" ]
+                    [ Html.text "Очистить доску" ]
                 , Html.text (keyHint model ClearBoard)
                 ]
             , if model.gameIsLocal then
@@ -9200,7 +9297,7 @@ viewInfoPanelHelpers model =
                         ]
                         [ Html.text
                             (String.concat
-                                [ "Sync solved from server ("
+                                [ "Синхронизировать решенные с сервера ("
                                 , String.fromInt (Set.size (pendingServerSolves model))
                                 , ")"
                                 ]
@@ -9222,7 +9319,7 @@ viewInfoPanelItems model =
         ]
         [ Html.summary
             []
-            [ Html.text "Items" ]
+            [ Html.text "Предметы" ]
         , Html.div
             [ HA.class "row gap-m"
             , HA.style "flex-wrap" "wrap"
@@ -9240,9 +9337,9 @@ viewInfoPanelItems model =
                     ]
                     [ Html.text
                         (String.concat
-                            [ "Solve Selected Cell ("
+                            [ "Решить выбранную ячейку ("
                             , String.fromInt (model.solveSelectedCellReceived - model.solveSelectedCellUsed)
-                            , " uses)"
+                            , " использований)"
                             ]
                         )
                     ]
@@ -9261,9 +9358,9 @@ viewInfoPanelItems model =
                     ]
                     [ Html.text
                         (String.concat
-                            [ "Solve Random Cell ("
+                            [ "Решить случайную ячейку ("
                             , String.fromInt (model.solveRandomCellReceived - model.solveRandomCellUsed)
-                            , " uses)"
+                            , " использований)"
                             ]
                         )
                     ]
@@ -9282,9 +9379,9 @@ viewInfoPanelItems model =
                     ]
                     [ Html.text
                         (String.concat
-                            [ "Remove Random Candidate ("
+                            [ "Удалить случайного кандидата ("
                             , String.fromInt (model.removeRandomCandidateReceived - model.removeRandomCandidateUsed)
-                            , " uses)"
+                            , " использований)"
                             ]
                         )
                     ]
@@ -9301,14 +9398,14 @@ viewInfoPanelSettings model =
         ]
         [ Html.summary
             []
-            [ Html.text "Client Settings" ]
+            [ Html.text "Настройки клиента" ]
         , Html.div
             [ HA.class "column gap-m"
             , HA.style "align-items" "flex-start"
             ]
             [ Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Color scheme:"
+                [ Html.text "Цветовая схема:"
                 , Html.select
                     [ HE.onInput ColorSchemeChanged
                     ]
@@ -9316,22 +9413,22 @@ viewInfoPanelSettings model =
                         [ HA.value "light dark"
                         , HA.selected (model.colorScheme == "light dark")
                         ]
-                        [ Html.text "Browser default" ]
+                        [ Html.text "По умолчанию" ]
                     , Html.option
                         [ HA.value "light"
                         , HA.selected (model.colorScheme == "light")
                         ]
-                        [ Html.text "Light" ]
+                        [ Html.text "Светлая" ]
                     , Html.option
                         [ HA.value "dark"
                         , HA.selected (model.colorScheme == "dark")
                         ]
-                        [ Html.text "Dark" ]
+                        [ Html.text "Темная" ]
                     ]
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Candidate layout:"
+                [ Html.text "Расположение кандидатов:"
                 , Html.select
                     [ HE.onInput CandidateLayoutChanged
                     ]
@@ -9339,12 +9436,12 @@ viewInfoPanelSettings model =
                         [ HA.value "0"
                         , HA.selected (model.candidateLayout == 0)
                         ]
-                        [ Html.text "Standard (top-to-bottom)" ]
+                        [ Html.text "Стандартное (сверху вниз)" ]
                     , Html.option
                         [ HA.value "1"
                         , HA.selected (model.candidateLayout == 1)
                         ]
-                        [ Html.text "Numpad (bottom-to-top)" ]
+                        [ Html.text "Numpad (снизу вверх)" ]
                     ]
                 ]
             , Html.label
@@ -9357,7 +9454,7 @@ viewInfoPanelSettings model =
                     , HE.onCheck EnableAnimationsChanged
                     ]
                     []
-                , Html.text "Enable animations"
+                , Html.text "Включить анимации"
                 ]
             , Html.label
                 [ HA.class "row gap-s"
@@ -9369,7 +9466,7 @@ viewInfoPanelSettings model =
                     , HE.onCheck FireworkOnNothingChanged
                     ]
                     []
-                , Html.text "Launch a firework when receiving a Nothing"
+                , Html.text "Запускать фейерверк при получении Пустышки"
                 ]
             , Html.label
                 [ HA.class "row gap-s"
@@ -9381,7 +9478,7 @@ viewInfoPanelSettings model =
                     , HE.onCheck ShowInputErrorsChanged
                     ]
                     []
-                , Html.text "Show input errors"
+                , Html.text "Показывать ошибки ввода"
                 ]
             , Html.label
                 [ HA.class "row gap-s"
@@ -9393,11 +9490,11 @@ viewInfoPanelSettings model =
                     , HE.onCheck ShowToastMessagesChanged
                     ]
                     []
-                , Html.text "Show toast messages"
+                , Html.text "Показывать всплывающие сообщения"
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Trap duration:"
+                [ Html.text "Продолжительность ловушек:"
                 , Html.select
                     [ HE.onInput TrapDurationChanged
                     ]
@@ -9405,32 +9502,32 @@ viewInfoPanelSettings model =
                         [ HA.value "30"
                         , HA.selected (model.trapDuration == 30)
                         ]
-                        [ Html.text "30 seconds" ]
+                        [ Html.text "30 секунд" ]
                     , Html.option
                         [ HA.value "60"
                         , HA.selected (model.trapDuration == 60)
                         ]
-                        [ Html.text "1 minute" ]
+                        [ Html.text "1 минута" ]
                     , Html.option
                         [ HA.value "120"
                         , HA.selected (model.trapDuration == 120)
                         ]
-                        [ Html.text "2 minutes" ]
+                        [ Html.text "2 минуты" ]
                     , Html.option
                         [ HA.value "300"
                         , HA.selected (model.trapDuration == 300)
                         ]
-                        [ Html.text "5 minutes" ]
+                        [ Html.text "5 минут" ]
                     , Html.option
                         [ HA.value "900"
                         , HA.selected (model.trapDuration == 900)
                         ]
-                        [ Html.text "15 minutes" ]
+                        [ Html.text "15 минут" ]
                     ]
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Emoji trap variant:"
+                [ Html.text "Вариант эмодзи-ловушки:"
                 , Html.select
                     [ HE.onInput EmojiTrapVariantChanged
                     ]
@@ -9438,29 +9535,29 @@ viewInfoPanelSettings model =
                         [ HA.value "animals"
                         , HA.selected (model.emojiTrapVariant == EmojiTrapAnimals)
                         ]
-                        [ Html.text "Animals" ]
+                        [ Html.text "Животные" ]
                     , Html.option
                         [ HA.value "fruits"
                         , HA.selected (model.emojiTrapVariant == EmojiTrapFruits)
                         ]
-                        [ Html.text "Fruits" ]
+                        [ Html.text "Фрукты" ]
                     , Html.option
                         [ HA.value "shapes"
                         , HA.selected (model.emojiTrapVariant == EmojiTrapShapes)
                         ]
-                        [ Html.text "Shapes" ]
+                        [ Html.text "Фигуры" ]
                     , Html.option
                         [ HA.value "random"
                         , HA.selected (model.emojiTrapVariant == EmojiTrapRandom)
                         ]
-                        [ Html.text "Random" ]
+                        [ Html.text "Случайный" ]
                     ]
                 ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick ToggleKeybindingsMenuPressed
                 ]
-                [ Html.text "Configure keybindings" ]
+                [ Html.text "Настроить управление" ]
             ]
         ]
 
@@ -9472,7 +9569,7 @@ viewInfoPanelDebug model =
         ]
         [ Html.summary
             []
-            [ Html.text "Debug / Cheats" ]
+            [ Html.text "Отладка / Читы" ]
         , Html.div
             [ HA.class "column gap-m"
             , HA.style "align-items" "flex-start"
@@ -9481,47 +9578,47 @@ viewInfoPanelDebug model =
                 [ HA.class "button"
                 , HE.onClick UnlockSelectedBlockPressed
                 ]
-                [ Html.text "Unlock selected block" ]
+                [ Html.text "Разблокировать выбранный блок" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick AddDebugItemsPressed
                 ]
-                [ Html.text "Add 1000 of each item" ]
+                [ Html.text "Добавить по 1000 каждого предмета" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick SolveSingleCandidatesPressed
                 ]
-                [ Html.text "Solve single-candidate cells in board" ]
+                [ Html.text "Решить ячейки с одним кандидатом на доске" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick TriggerFireworksPressed
                 ]
-                [ Html.text "Trigger Fireworks" ]
+                [ Html.text "Запустить фейерверк" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick TriggerDiscoTrapPressed
                 ]
-                [ Html.text "Trigger Disco Trap" ]
+                [ Html.text "Запустить Диско-ловушку" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick TriggerEmojiTrapPressed
                 ]
-                [ Html.text "Trigger Emoji Trap" ]
+                [ Html.text "Запустить Эмодзи-ловушку" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick TriggerTunnelVisionTrapPressed
                 ]
-                [ Html.text "Trigger Tunnel Vision Trap" ]
+                [ Html.text "Запустить Туннельное зрение" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick CancelTrapsPressed
                 ]
-                [ Html.text "Cancel Traps" ]
+                [ Html.text "Отменить ловушки" ]
             , Html.button
                 [ HA.class "button"
                 , HE.onClick (DeathLinkTriggered Encode.null)
                 ]
-                [ Html.text "Trigger Death Link" ]
+                [ Html.text "Вызвать Связь Смерти" ]
             , if model.gameIsLocal then
                 Html.text ""
 
@@ -9536,7 +9633,7 @@ viewInfoPanelDebug model =
                         , HE.onCheck EnableDeathLinkChanged
                         ]
                         []
-                    , Html.text "Enable death link"
+                    , Html.text "Включить Связь Смерти"
                     ]
             , if model.gameIsLocal then
                 Html.text ""
@@ -9546,7 +9643,7 @@ viewInfoPanelDebug model =
                     [ HA.class "button"
                     , HE.onClick SyncSolvedToServerPressed
                     ]
-                    [ Html.text "Sync solved to server" ]
+                    [ Html.text "Синхронизировать решения с сервером" ]
             ]
         ]
 
@@ -9560,7 +9657,7 @@ viewInfoPanelMessages model =
         ]
         [ Html.summary
             []
-            [ Html.text "Messages" ]
+            [ Html.text "Сообщения" ]
         , Html.div
             [ HA.class "column gap-m"
             ]
@@ -9580,7 +9677,7 @@ viewInfoPanelMessages model =
                     ]
                     [ Html.input
                         [ HA.type_ "text"
-                        , HA.placeholder "Enter message..."
+                        , HA.placeholder "Введите сообщение..."
                         , HA.value model.messageInput
                         , HA.style "flex-grow" "1"
                         , HE.onInput MessageInputChanged
@@ -9588,7 +9685,7 @@ viewInfoPanelMessages model =
                         []
                     , Html.button
                         []
-                        [ Html.text "Send" ]
+                        [ Html.text "Отправить" ]
                     ]
                 )
             ]
@@ -9599,7 +9696,7 @@ viewCellInfo : Model -> ( Int, Int ) -> Html Msg
 viewCellInfo model ( row, col ) =
     Html.div
         []
-        [ viewCellLabel "Cell" row col
+        [ viewCellLabel "Ячейка" row col
         ]
 
 
@@ -9608,7 +9705,7 @@ viewBlockInfo model block =
     Html.div
         [ HA.class "column"
         ]
-        [ viewCellLabel "Block" block.startRow block.startCol
+        [ viewCellLabel "Блок" block.startRow block.startCol
         , viewReward model (cellToBlockId ( block.startRow, block.startCol )) block
         , viewBlockUnlockInfo model block
         ]
@@ -9655,7 +9752,7 @@ viewBlockUnlockInfo model block =
                     []
                     [ Html.text
                         (String.concat
-                            [ "Unlock: "
+                            [ "Разблокировка: "
                             , bundlePrefix
                             , item.locationName
                             , " ("
@@ -9675,7 +9772,7 @@ viewBlockUnlockInfo model block =
                     [ Html.text
                         (case maybeBundle of
                             Just _ ->
-                                "Unlock: " ++ unlockItemName
+                                "Разблокировка: " ++ unlockItemName
 
                             Nothing ->
                                 "Unlock: ???"
@@ -9685,7 +9782,7 @@ viewBlockUnlockInfo model block =
                         , HE.onClick (HintItemPressed unlockItemName)
                         , HA.disabled (model.hintPoints < model.hintCost)
                         ]
-                        [ Html.text "Hint" ]
+                        [ Html.text "Подсказка" ]
                     ]
 
 
@@ -9694,7 +9791,7 @@ viewRowInfo model row =
     Html.div
         [ HA.class "column"
         ]
-        [ viewCellLabel "Row" row.startRow row.startCol
+        [ viewCellLabel "Строка" row.startRow row.startCol
         , viewReward model (cellToRowId ( row.startRow, row.startCol )) row
         ]
 
@@ -9704,7 +9801,7 @@ viewColInfo model col =
     Html.div
         [ HA.class "column"
         ]
-        [ viewCellLabel "Column" col.startRow col.startCol
+        [ viewCellLabel "Столбец" col.startRow col.startCol
         , viewReward model (cellToColId ( col.startRow, col.startCol )) col
         ]
 
@@ -9714,7 +9811,7 @@ viewBoardInfo model board =
     Html.div
         [ HA.class "column"
         ]
-        [ viewCellLabel "Board" board.startRow board.startCol
+        [ viewCellLabel "Доска" board.startRow board.startCol
         , viewReward model (cellToBoardId ( board.startRow, board.startCol )) board
         ]
 
@@ -9775,7 +9872,7 @@ viewReward model id area =
                     ]
                     [ Html.text
                         (String.concat
-                            [ "Reward: "
+                            [ "Награда: "
                             , hint.itemName
                             , " ("
                             , String.join
@@ -9802,7 +9899,7 @@ viewReward model id area =
                             [ HA.class "button"
                             , HE.onClick (HintLocationPressed id)
                             ]
-                            [ Html.text "Hint" ]
+                            [ Html.text "Подсказка" ]
                     ]
                 , case bundleContents model hint of
                     [] ->
@@ -9813,7 +9910,7 @@ viewReward model id area =
                             []
                             [ Html.text
                                 (String.concat
-                                    [ "Unlocks: "
+                                    [ "Разблокирует: "
                                     , List.map
                                         (\( row, col ) -> rowToLabel row ++ String.fromInt col)
                                         cells
@@ -9844,7 +9941,7 @@ viewReward model id area =
                                 area.cells
                             )
                         ]
-                        [ Html.text "Scout" ]
+                        [ Html.text "Разведать" ]
 
                   else
                     Html.text ""
@@ -9919,7 +10016,7 @@ viewDisconnectedOverlay model =
             ]
             [ Html.h2
                 []
-                [ Html.text "Disconnected" ]
+                [ Html.text "Отключено" ]
             , Html.div
                 []
                 [ Html.text "You have been disconnected from the Archipelago server."
@@ -9928,7 +10025,7 @@ viewDisconnectedOverlay model =
                 [ HA.class "button"
                 , HE.onClick ConnectPressed
                 ]
-                [ Html.text "Reconnect" ]
+                [ Html.text "Переподключиться" ]
             ]
         ]
 
@@ -9946,11 +10043,11 @@ viewKeybindingsOverlay model =
             ]
             [ Html.h2
                 []
-                [ Html.text "Keybindings" ]
+                [ Html.text "Управление" ]
             , Html.p
                 [ HA.class "keybindings-instructions"
                 ]
-                [ Html.text "Click a slot, then press a key to bind it. Click the slot again to clear it, or press Escape to cancel." ]
+                [ Html.text "Нажмите на слот, затем нажмите клавишу для привязки. Нажмите на слот еще раз, чтобы очистить его, или нажмите Escape для отмены." ]
             , Html.div
                 [ HA.class "keybindings-list"
                 ]
@@ -9963,12 +10060,12 @@ viewKeybindingsOverlay model =
                     [ HA.class "button"
                     , HE.onClick ResetKeybindingsPressed
                     ]
-                    [ Html.text "Reset to defaults" ]
+                    [ Html.text "Сбросить по умолчанию" ]
                 , Html.button
                     [ HA.class "button"
                     , HE.onClick ToggleKeybindingsMenuPressed
                     ]
-                    [ Html.text "Close" ]
+                    [ Html.text "Закрыть" ]
                 ]
             ]
         ]
@@ -10002,7 +10099,7 @@ viewKeybindingSlot model action slotIndex slot =
         ]
         [ Html.text
             (if isListening then
-                "Press a key…"
+                "Нажмите клавишу…"
 
              else
                 slot
