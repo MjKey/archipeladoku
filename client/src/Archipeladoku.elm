@@ -9494,7 +9494,16 @@ viewInfoPanelSettings model =
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Продолжительность ловушек: ХУЙ"]
+                [ Html.text "ТУТ МОГЛА БЫ БЫТЬ НАСТРОЙКА ПРОДОЛЖИТЕЛЬНОСТИ ЛОВУШКИ:"
+                , Html.select
+                    [ Html.option
+                        [ Html.text "НУ БЛИН" ]
+                    , Html.option
+                        [ Html.text "САНЯ ЗАПРЕТИЛ" ]
+                    , Html.option
+                        [ Html.text "УВЫ" ]
+                    ]
+                ]
             , Html.label
                 [ HA.class "row gap-s" ]
                 [ Html.text "Вариант эмодзи-ловушки:"
