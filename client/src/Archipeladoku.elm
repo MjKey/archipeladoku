@@ -8858,7 +8858,7 @@ viewInfoPanel model =
         , viewInfoPanelHelpers model
         , viewInfoPanelItems model
         , viewInfoPanelSelected model
-        , viewInfoPanelSettings model
+        , if model.gameIsLocal then viewInfoPanelSettings model else Html.text ""
         , if model.gameIsLocal then viewInfoPanelDebug model else Html.text ""
         , viewInfoPanelMessages model
         ]
