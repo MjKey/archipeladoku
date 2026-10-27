@@ -9497,13 +9497,13 @@ viewInfoPanelSettings model =
                 [ Html.text "ТУТ МОГЛА БЫ БЫТЬ НАСТРОЙКА ПРОДОЛЖИТЕЛЬНОСТИ ЛОВУШКИ:"
                 , Html.select
                     [ Html.option
-                        [ HA.value "BLIN", HA.selected ""]
+                        [ HA.value "BLIN", HA.selected True]
                         [ Html.text "НУ БЛИН" ]
                     , Html.option
-                        [ HA.value "SANYA ZAPRETIL", HA.selected ""]
+                        [ HA.value "SANYA ZAPRETIL", HA.selected False]
                         [ Html.text "САНЯ ЗАПРЕТИЛ" ]
                     , Html.option
-                        [ HA.value "UVI", HA.selected ""]
+                        [ HA.value "UVI", HA.selected False ]
                         [ Html.text "УВЫ" ]
                     ]
                 ]
