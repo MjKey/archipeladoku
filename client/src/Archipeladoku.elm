@@ -8859,7 +8859,7 @@ viewInfoPanel model =
         , viewInfoPanelItems model
         , viewInfoPanelSelected model
         , viewInfoPanelSettings model
-        , viewInfoPanelDebug model
+        , if model.gameIsLocal then viewInfoPanelDebug model else Html.text ""
         , viewInfoPanelMessages model
         ]
 
