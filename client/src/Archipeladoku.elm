@@ -9500,10 +9500,10 @@ viewInfoPanelSettings model =
                         [ HA.value "BLIN", HA.selected (1 == 1)]
                         [ Html.text "НУ БЛИН" ]
                     , Html.option
-                        [ HA.value "SANYA ZAPRETIL", HA.selected (1 != 1)]
+                        [ HA.value "SANYA ZAPRETIL", HA.selected (1 /= 1)]
                         [ Html.text "САНЯ ЗАПРЕТИЛ" ]
                     , Html.option
-                        [ HA.value "UVI", HA.selected (1 != 1) ]
+                        [ HA.value "UVI", HA.selected (1 /= 1) ]
                         [ Html.text "УВЫ" ]
                     ]
                 ]
