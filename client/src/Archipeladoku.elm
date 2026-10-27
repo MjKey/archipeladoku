@@ -9494,37 +9494,7 @@ viewInfoPanelSettings model =
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "Продолжительность ловушек:"
-                , Html.select
-                    [ HE.onInput TrapDurationChanged
-                    ]
-                    [ Html.option
-                        [ HA.value "30"
-                        , HA.selected (model.trapDuration == 30)
-                        ]
-                        [ Html.text "30 секунд" ]
-                    , Html.option
-                        [ HA.value "60"
-                        , HA.selected (model.trapDuration == 60)
-                        ]
-                        [ Html.text "1 минута" ]
-                    , Html.option
-                        [ HA.value "120"
-                        , HA.selected (model.trapDuration == 120)
-                        ]
-                        [ Html.text "2 минуты" ]
-                    , Html.option
-                        [ HA.value "300"
-                        , HA.selected (model.trapDuration == 300)
-                        ]
-                        [ Html.text "5 минут" ]
-                    , Html.option
-                        [ HA.value "900"
-                        , HA.selected (model.trapDuration == 900)
-                        ]
-                        [ Html.text "15 минут" ]
-                    ]
-                ]
+                [ Html.text "Продолжительность ловушек: ХУЙ"]
             , Html.label
                 [ HA.class "row gap-s" ]
                 [ Html.text "Вариант эмодзи-ловушки:"
