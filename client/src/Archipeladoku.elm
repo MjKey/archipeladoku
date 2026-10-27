@@ -9494,19 +9494,7 @@ viewInfoPanelSettings model =
                 ]
             , Html.label
                 [ HA.class "row gap-s" ]
-                [ Html.text "ТУТ МОГЛА БЫ БЫТЬ НАСТРОЙКА ПРОДОЛЖИТЕЛЬНОСТИ ЛОВУШКИ:"
-                , Html.select
-                    [ Html.option
-                        [ HA.value "BLIN", HA.selected (1 == 1)]
-                        [ Html.text "НУ БЛИН" ]
-                    , Html.option
-                        [ HA.value "SANYA ZAPRETIL", HA.selected (1 /= 1)]
-                        [ Html.text "САНЯ ЗАПРЕТИЛ" ]
-                    , Html.option
-                        [ HA.value "UVI", HA.selected (1 /= 1) ]
-                        [ Html.text "УВЫ" ]
-                    ]
-                ]
+                [ Html.text "ТУТ МОГЛА БЫ БЫТЬ ВАША НАСТРОЙКА ПРОДОЛЖИТЕЛЬНОСТИ ЛОВУШКИ НО САНЯ ЕЁ УДАЛИЛ" ]
             , Html.label
                 [ HA.class "row gap-s" ]
                 [ Html.text "Вариант эмодзи-ловушки:"
